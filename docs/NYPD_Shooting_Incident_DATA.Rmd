@@ -1,0 +1,173 @@
+---
+title: "NYPD_Shooting_Incident_Data_2006_2022"
+author: "M. Prestegaard"
+date: "2023-09-20"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+## NYPD Shooting Incident Data Import, Analysis
+The Metadata used for this analysis project was selected from data.gov, under the title "NYPD Shooting Incident Data (Historic)" published by the City of New York. The data is updated quarterly, and the last recorded update with 09/02/2023, and was the set used for this work. This is a public data set that breaks down each shooting incident recorded through the NYPD from 2006 through the end of 2022. Each record includes information about the date of the incident, location, victim/perpetrator information, precinct, borough (governmental district), and more. 
+The main focus of this analysis will be district (referred to as "boro" in data set) and year-over-year trends. 
+
+## 1. Import correct packages into RMd. 
+In this step, a CRAN mirror is installed to properly run r functions and packages on this system. Then, necessary packages, "tidyverse", "ggplot2", and "gridExtra" are installed and loaded. 
+```{r import_packages_needed}
+# Specify a CRAN mirror
+repos <- "https://cloud.r-project.org/"
+
+# Install tidyverse and ggplot2 packages
+install.packages(c("tidyverse", "ggplot2","dplyr", "gridExtra" ), repos = repos)
+
+# Load the packages
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+```
+
+## 2. Import Data from catalog.data.gov
+This Data set, entitled, "NYPD Shooting Incident Data Report" is imported from the following URL. 
+```{r import_data_from_url }
+ url <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+```
+## 3. Read the data and verify it is from the URL file
+In this step, we open up the data file and verify that it properly imported from the URL. It should print the first 10 header rows of the data.
+```{r read_url_file}
+url_data<-read_csv(url)
+url_data
+```
+## 4. Basic cleaning of data (Removing Jurisdiction Code, LOC_classification, X and Y coordinates, and lattitude Longitude)
+In this step, we eliminate some of the data columns from the file that we know we won't be utilizing in this analysis for efficiency reasons.  This data may have been kept if we were doing a  "location-based" plotting analysis that required X and Y coordinates or latitude/longitude values. That is out of the scope of this first R Markdown project, but would be interesting to incorporate in future work with this data set. 
+```{r Basic_Cleaning}
+url_data<-url_data %>%
+select(-c(LOC_OF_OCCUR_DESC,LOC_CLASSFCTN_DESC,JURISDICTION_CODE, X_COORD_CD,  Y_COORD_CD, Latitude, Longitude ))
+
+
+```
+
+## 5. Look at summary of data to see if any problems:
+Check out the data summary of the data set. This is a handy step in seeing maximums, minimums, lengths of vectors, quartile distributions, and other class specific information. It can also be used to detect errors such as improper format, importing issues, etc. prior to any analysis work. 
+```{r Initla_summary}
+summary(url_data)
+```
+
+## 6. Make Occurance Date a date object instead of a character vector
+In order to conduct any sort of date/time analysis, we need to first transform the information in the "OCCUR_DATE" column into date format. Without this step, we can not utilize the r package lubridate to categorize by any date elements. Then we print the Class() to make sure it's been transformed into the proper class for analysis. 
+``` {r Transform_Date_Object}
+url_data$OCCUR_DATE<- mdy(url_data$OCCUR_DATE)
+#Verify Date Object
+class(url_data$OCCUR_DATE)
+```
+## 7. Analyze Shooting Incidents by "Boro"
+In this step, the first of the analysis, we categorize the number of incidents by their corresponding 'Boro' (borough, or governing district of New York). . We do this by using the "%>" operator from the dplyr package and as described in the instructional videos. We then group all incidents to their corresponding borough, and then summarize the amounts (n) of each for all five boroughs. We can then see how many incidents have  occurred in each governing district of New York. As displayed, **Brooklyn** had the most incidents in the 16 year span with **10,933 incidents between 2006 and 2022**. This averages to **683 per year**, or **1.87 per day** for the last 16 years. 
+```{r Analyze_by_Boro}
+Incident_by_Boro <- url_data %>%
+  group_by(BORO) %>%
+  summarize(n = n())
+#Display the Resulting Amounts
+Incident_by_Boro
+
+```
+## 8. Analyze Shooting Incidents by "Precint"
+To continue on the same realm of analysis, we group the data by its indicated precinct, and summarized the amounts(n) like the previous steps. 
+```{r Analyze_by_Precint}
+Incident_by_Precint <- url_data %>%
+  group_by(PRECINCT) %>%
+  summarize(n = n())
+Incident_by_Precint
+```
+## 9. Plot Date versus Running total of Incidents 
+In this first, and most basic, method of visually communicating results, we plot the year versus the cumulative amount of incidents from all precincts from the year 2006 to 2022. This model depicts the consistency of year-to-year statistics as whole, and as the blue line (line of best fit) indicates, there's slight fluctuation,  but the data hugs the trend pretty close. Thus, one might say that there seems to be an almost consistent amount year-to- year of shooting incidents recorded by the NYPD. However, this model is **strictly qualitative**, and further analysis would need to be conducted to fully understand what the data describes. 
+``` {r Plot_Date_v_Total}
+#Create a New Dataframe
+ date_counts<-url_data %>%
+     mutate(OCCUR_DATE=as.Date(OCCUR_DATE, format = "%m/%d/%Y")) %>%
+     group_by(OCCUR_DATE) %>%
+     summarize(Incidents = n()) %>%
+     arrange(OCCUR_DATE) %>%
+     mutate(Total =cumsum(Incidents))
+#Plot using ggplot
+ ggplot(date_counts, aes(x=OCCUR_DATE, y=Total))+
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue", size = 0.5) +
+  labs(title = "Cumulative Shooting Incidents each year 2006-2022",
+       x = "Date",
+       y = "Total Shooting Incidents")
+
+```
+
+## 10. Plot Brooklyn's Incidents per year trends 2006-2022
+In this next visualization, we filter the data to only show **BROOKLYN**, the boro with the highest recorded incidents in the data set. We use the "mutate" command to group and then organize by year, and summarize all the incidents to give us the year-to-year visual (and numerical values) over the past 18 years. As the bar graph shows, there was a pretty massive decrease year-to-year from 2012 to 2019. Was this because the economic climate from 2008 influenced crime in New York? Was this the same with the year 2020 (the start of the COVID-19 pandemic and people losing their jobs)?   
+``` {r Incidents_Bar_Chart}
+# Filter the data for Brooklyn and calculate incidents per year
+brooklyn_data <- url_data %>%
+  filter(BORO == "BROOKLYN") %>%
+  mutate(Year = year(OCCUR_DATE)) %>%  
+  group_by(Year) %>%
+  summarize(Incidents = n())
+
+# Create a bar chart for Brooklyn's data
+ggplot(brooklyn_data, aes(x = as.character(Year), y = Incidents)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  geom_text(aes(label = Incidents), vjust = -0.5, size = 3) +
+  labs(title = "Incidents per Year in Brooklyn",
+       x = "Year",
+       y = "Number of Incidents") +
+  theme_minimal()
+```
+
+## 11. Comparing Year Over Year data for all 5 Boros
+The final visual representation of data, and the most complicated, is a model similar to the previous bar chart, that plots each borough's year-over-year amount of incidents over top of each other. This code uses a vector of the boroughs, then iterates through each to extract the year date (like in previous example) and then again to group by year for the number of counts (n). Then each is stored into a new vector that uses the borough's name, the year, and number of incidents. Then, the data is bound together to make a 3-element array, to then make a scatter plot. This scatter plot, "Incidents per Year by Borough", displays a more visually accurate representation of how the incidents in each borough change over time. 
+```{r More_Analysis}
+# Define the borros of interest
+borros_of_interest <- c("BRONX", "BROOKLYN", "MANHATTAN", "QUEENS", "STATEN ISLAND")
+
+# Create an empty data frame to store the combined data
+combined_data <- data.frame()
+
+# Loop through each borro
+for (borro in borros_of_interest) {
+  # Filter the data for the current borro
+  filtered_data <- url_data %>%
+    filter(BORO == borro)
+  
+  # Extract the year from OCCUR_DATE
+  filtered_data <- filtered_data %>%
+    mutate(Year = year(OCCUR_DATE))
+  
+  # Group and summarize the data by year
+  summarized_data <- filtered_data %>%
+    group_by(Year) %>%
+    summarize(Incidents = n())
+  
+  # Add a column for the borro name
+  summarized_data$Borro <- borro
+  
+  # Bind the summarized data to the combined data frame
+  combined_data <- bind_rows(combined_data, summarized_data)
+}
+
+# Create a scatterplot with color-coordination by borro
+ggplot(combined_data, aes(x = Year, y = Incidents, color = Borro)) +
+  geom_point() +
+  geom_line(aes(group = Borro), alpha = 0.5)
+  labs(title = "Incidents per Year by Borough",
+       x = "Year",
+       y = "Number of Incidents",
+       color = "Borro") +
+  theme_minimal()
+```
+
+## 12.  Biases Identification and Conclusions
+  In this data analysis of NYPD Shooting Incident History from the years 2006 to 2022, there are quite a few ways in which pre-existing bias may have effected the resulting analysis. 
+  First, it goes without saying that gun violence and police brutality has and continues to be a topic of controversy in the United States. Although it may have had more "media attention" in the previous years and not as much today, there is still little one can do to eliminate media-posed bias on the topic. Thus, there is no specific way to eliminate the way in which the analyzer looks at this data set. Of the three data visualizations and two different analysis methods, all data was looked at in a "number of incidents" method. There was no deeper analysis into incidents per capita, or population-based metrics. Thus, with the increasing numeric (from the incidents in NY per each year, Incidents per year in Brooklyn ) one could argue that all the analysis and visualizations are indicating that the number of shooting incidents is on the rise. However, when looking at the Incidents per year by Borough scatter plot, one can sort of see that there is not an indicative "increase" year over year in any of the 5 distinct boroughs. In fact, the visual representations indicate an idea that between the years 2012 and 2020, there was a decrease year over year for almost every borough. 
+
+  In conclusion, this document details the processes and methods of importing data via ".csv" from a web url, utilizing key r packages, basic cleaning and summarizing of the data, and a couple example methods of how the data could be analyzed and visually represented. For future research and to mitigate bias of the analysis, there should be a greater focus on year-to-year incidents with regards to the population and demographics--for example, perhaps the reason the reported incidents decreased between 2012 and 2020 was actually due to a massive drop in population or population density of a certain area. Maybe the political climate of New York influenced the population to stop reporting shooting incidents. It could even be based on budget constraints within borough's precincts. Overall, the ways in which to analyze this data set are endless, and with incorporation of other trusted data sets (populations, demographics, etc) the conclusions are limitless. Ultimately, this data analysis exercise describes a step-by-step importation, cleansing, and analysis of an assigned data set and sheds and provides insight into reported shooting incidents in the 5 broughs represented by the NYPD. 
